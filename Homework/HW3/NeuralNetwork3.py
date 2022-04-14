@@ -1,26 +1,28 @@
 import numpy as np
 import time
+import sys
+
+is_test = True
+
+args_cmd = sys.argv
+train_images = str(args_cmd[1])
+train_labels = str(args_cmd[2]) 
+test_images = str(args_cmd[3])
 
 starttime = time.time()
 pixel_num = 784
-first_layer_size = 64
-second_layer_size = 32
+first_layer_size = 32
+second_layer_size = 16
 num_of_class = 10
-learning_rate = 0.1
-epochs = 100
+learning_rate = 0.05
+epochs = 150
 
-print("import testing data...")
-test_data = np.genfromtxt("test_image.csv", delimiter=",")/255
-test_label = np.genfromtxt("test_label.csv", dtype=np.int8)
-
-print("import training data...")
-train_data = np.genfromtxt("train_image.csv", delimiter=",")/255
-train_label = np.genfromtxt("train_label.csv", dtype=np.int8)
-
-# train_data = np.genfromtxt("dev/dev_img.csv", dtype=np.float64, delimiter=",")/255
-# train_label = np.genfromtxt("dev/dev_label.csv", dtype=np.int8)
-# test_data = np.genfromtxt("dev/dev_img.csv", dtype=np.float64, delimiter=",")/255
-# test_label = np.genfromtxt("dev/dev_label.csv", dtype=np.int8)
+test_data = np.genfromtxt(test_images, delimiter=",",  dtype=np.float32)/255
+test_label = None
+if is_test:
+    test_label = np.genfromtxt("test_label.csv", dtype=np.int8)
+train_data = np.genfromtxt(train_images, delimiter=",", dtype=np.float32)/255
+train_label = np.genfromtxt(train_labels, dtype=np.int8)
 
 w1 = np.random.uniform(-0.5, 0.5, (first_layer_size, pixel_num))
 w2 = np.random.uniform(-0.5, 0.5, (second_layer_size, first_layer_size))
@@ -48,7 +50,7 @@ def one_hot(label):
     ret[label][0] = 1
     return ret
 
-def forward_propagation(input, label):
+def forward_propagation(input):
     global w1, w2, w3, b1, b2, b3
 
     input = np.atleast_2d(input).T
@@ -65,10 +67,7 @@ def forward_propagation(input, label):
     output_middle = np.dot(w3, hl2) + b3
     output = softmax(output_middle)
 
-    #cost 
-    err = crossEntropy(output, label)
-
-    return hl1, hl2, output, err
+    return hl1, hl2, output
 
 def back_propagation(input, hl1, hl2, output, label):
     global w1, w2, w3, b1, b2, b3
@@ -97,41 +96,44 @@ def back_propagation(input, hl1, hl2, output, label):
     db1 = dh1
     b1 += -learning_rate * db1
 
-def test(epo):
-    a = np.array([], dtype=np.int32)
+def predict():
+    a = []
     correct = 0
     for i in range(test_data.shape[0]):
-        hl1, hl2, output, err = forward_propagation(test_data[i], test_label[i])
+        hl1, hl2, output = forward_propagation(test_data[i])
         index = np.argmax(output)
-        if(index == test_label[i]):
+        if is_test and index == test_label[i]:
             correct += 1
-        np.append(a, int(index))
-    print("accuracy in epo " + str(epo) + " is " + str(correct * 100.0/test_data.shape[0]) + "%")
-    np.savetxt("output.csv", a, fmt='%i')
+        a.append(index)
+    if is_test:
+        print("accuracy is " + str(correct * 100.0/test_data.shape[0]) + "%")
+    
+    np.array(a).tofile('test_predictions.csv', sep='\n')
 
 def train():
     print("start training...")
     cnt = 0
-    tot_data = train_data.shape[0]
+    # tot_data = train_data.shape[0]
+    tot_data = 10000
     for epoch in range(epochs):
         error = 0
         global learning_rate
-        if epoch > 50:
-            learning_rate = 0.05
-        if epoch > 80:
-            learning_rate = 0.01
-        if epoch > 90:
-            learning_rate = 0.005
-        if epoch > 95:
-            learning_rate = 0.001
-        for i in range(tot_data):
+        # if epoch > 100:
+        #     learning_rate = 0.05
+        # if epoch > 200:
+        #     learning_rate = 0.01
+        for i in range(3 * tot_data, 4 * tot_data):
             input_data = train_data[i]
             input_label = train_label[i]
-            hl1, hl2, output, err = forward_propagation(input_data, input_label)
-            cnt += 1
-            error += err
+            hl1, hl2, output = forward_propagation(input_data)
+            if is_test:
+                err = crossEntropy(output, input_label)
+                cnt += 1
+                error += err
             back_propagation(input_data, hl1, hl2, output, input_label) 
-        print("error in epoch " + str(epoch) + " is " + str(error/tot_data) + ", with learning rate: " + str(learning_rate))
+        if is_test:
+            print("error in epoch " + str(epoch) + " is " + str(error/tot_data) + ", with learning rate: " + str(learning_rate))
 train()
-test(epochs)
-print("training finished in " + str((time.time() - starttime)/60) + " minutes")
+predict()
+if is_test:
+    print("training finished in " + str((time.time() - starttime)/60) + " minutes")
